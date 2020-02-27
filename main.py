@@ -17,9 +17,9 @@ SPCHECK_INTERVAL = 3600             # Time in seconds to update smartplug state 
 SYSTEM_LOOP_INTERVAL = 180          # Time in seconds between each iteration of main loop
 MOISTURE_SENSOR_CHK_INTERVAL = 900  # Time in seconds between each check of the moisture sensor
 PLUG_ADDR = "192.168.2.23"
-SERVOS = [("right", 18, (1350, 1500, 2250, 945)),   # (Name, Pin, (Open, Threshold, Close, Up))
-          ("left", 13, (1650, 1000, 750, 2055))]              
-DHT = [("right", "AM2320", 23, True),               # (Name, Model, Pin)
+SERVOS = [("right", 18, (1350, 1500, 2250)),    # (Name, Pin, (Open, Threshold, Close))
+          ("left", 13, (1650, 1000, 750))]              
+DHT = [("right", "AM2320", 23, True),           # (Name, Model, Pin)
        ("left", "AM2320", 6, True),
        ("light", "DHT11", 22, False)]
 FAN_PIN = 26
@@ -69,7 +69,7 @@ def init():
     lastCheckM = cTime.nowf()
 
     # init Servos
-    servos = servosC(pi, SERVOS)
+    servos = servosC(pi, SERVOS, fan)
     
     # init Smartplug
     lights = smartplugC(PLUG_ADDR)
@@ -79,9 +79,6 @@ def init():
 def output():
     print(lights.updateState())
     DHTSensors.output()
-
-
-def sendNotification
 
 
 def loop():

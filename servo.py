@@ -5,14 +5,12 @@ import cTime
 
 # Collection of servos. In main program create this class
 class Servos:
+
     def __init__(self, pi, devices, fan=False):
-        self.pi = pi
-        self.fan = fan
         self.servos = {}
 
         for i in devices:
-            Servos.servos[i[0]] = Servo(i)
-            Servos.pi.set_mode(i[1], gpio.OUTPUT)
+            self.servos[i[0]] = Servo(pi, i, fan)
 
 
     def set(self, name, newstate):
@@ -31,12 +29,18 @@ class Servos:
 
 # Indivisual servos
 class Servo:
-    def __init__(self, device):
+    def __init__(self, pi, device, fan):
+        self.pi = pi
+        self.pi.set_mode(device[1], gpio.OUTPUT)
+        self.fan = fan
+        
         self.name = device[0]
         self.pin = device[1]
-        self.state = [device[2][2], device[2][0]]
+        self.states = [device[2][2], device[2][0]]
         self.threshold = device[2][1]
-        self.up = device[2][3]
+        self.state = 0
+
+        self.set(0)
 
         
     def set(self, newState):
@@ -47,42 +51,46 @@ class Servo:
 
 
     def open(self):
-        self.chgState(self.state[1])
+        self.chgState(self.states[1])
         print(cTime.nowf() + " - ACTION Servo " + self.name + " Open")
+        self.state = 1
 
 
     def close(self):
-        self.chgState(self.state[0])
+        self.chgState(self.states[0])
         print(cTime.nowf() + " - ACTION Servo " + self.name + " Closed")
+        self.state = 0
     
 
+    # Does not change the self.state variable. Please use set(), open(), or close()
     def chgState(self, newState, hold=False):
-        if Servos.fan:
-            fstate = Servos.fan.state()
-            Servos.fan.off()
+        if self.fan:
+            fstate = self.fan.state()
+            self.fan.off()
 
-        Servos.pi.set_servo_pulsewidth(self.pin, self.state[newState])
+        self.pi.set_servo_pulsewidth(self.pin, self.states[newState])
         if not hold:
             cTime.sleep(1)
-            Servos.pi.set_servo_pulsewidth(self.pin, 0)
+            self.pi.set_servo_pulsewidth(self.pin, 0)
 
-        if Servos.fan:
-            Servos.fan.set(fstate)
+        if self.fan:
+            self.fan.set(fstate)
 
 
+    # Does not change the self.state variable. Please run set(0) or close() when finished
     def chgStateN(self, newState, hold=False):
-        if Servos.fan:
-            fstate = Servos.fan.state()
-            Servos.fan.off()
+        if self.fan:
+            fstate = self.fan.state()
+            self.fan.off()
 
-        Servos.pi.set_servo_pulsewidth(self.pin, newState)
+        self.pi.set_servo_pulsewidth(self.pin, newState)
         if not hold:
             cTime.sleep(1)
-            Servos.pi.set_servo_pulsewidth(self.pin, 0)
+            self.pi.set_servo_pulsewidth(self.pin, 0)
 
-        if Servos.fan:
-            Servos.fan.set(fstate)
+        if self.fan:
+            self.fan.set(fstate)
 
 
     def getState(self):
-        return 1 if Servos.pi.get_servo_pulsewidth(self.name) > Servos.threshold else 0
+        return self.state
