@@ -50,7 +50,7 @@ class DHT:
             if i not in ignore:
                 array.append(self.data[i]["temp"])
 
-        return min(array), max(array), mean(array)
+        return min(array), max(array), sum(array)/len(array)
 
 
     def getRHSummary(self, ignore=[]):
@@ -61,3 +61,33 @@ class DHT:
                 array.append(self.data[i]["RH"])
 
         return min(array), max(array)
+
+
+if __name__ == "__main__":
+    import pigpio as gpio
+    import cTime
+
+    DHTList = [       # (Name, Model, Pin)
+       ("left", "AM2320", 6, True),
+       ("right", "AM2320", 23, True),
+       ("light", "DHT11", 22, False)]
+
+    pi = gpio.pi()
+    currentTime = cTime.nowf()
+
+    pi.set_mode(5, gpio.OUTPUT)
+    pi.write(5, 1)
+    
+    DHTSensors = DHT(pi, DHTList)
+
+    DHTData = DHTSensors.getData()
+
+    minTemp, maxTemp, avgTemp = DHTSensors.getTempSummary(ignore=["light"])
+    minRH, maxRH = DHTSensors.getRHSummary()
+
+    print("Current Time: {}".format(currentTime))
+    print("Tempretures are: {:3.2f}, {:3.2f}, Light: {:3.2f}".format(DHTData["left"]["temp"], DHTData["right"]["temp"], DHTData["light"]["temp"]))
+    print("RH Values are: {:3.2f}, {:3.2f}, Light: {:3.2f}".format(DHTData["left"]["RH"], DHTData["right"]["RH"], DHTData["light"]["RH"]))
+    print("")
+    print("Calculated Temp Values are: MinT: {:3.2f}, MaxT: {:3.2f}, AvgT: {:3.2f}".format(minTemp, maxTemp, avgTemp))
+    print("Calculated RH Values are: MinRH: {:3.2f}, MaxRH: {:3.2f}".format(minRH, maxRH))

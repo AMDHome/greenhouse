@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import cTime
-import gpio
+import pigpio as gpio
 from ads1115_singleshot_pigpio import ADS1115 as ADS1115C
 from DHTWrapper import DHT as DHTC
 from fan import Fan as fanC
@@ -17,17 +17,17 @@ SPCHECK_INTERVAL = 3600             # Time in seconds to update smartplug state 
 SYSTEM_LOOP_INTERVAL = 180          # Time in seconds between each iteration of main loop
 MOISTURE_SENSOR_CHK_INTERVAL = 900  # Time in seconds between each check of the moisture sensor
 PLUG_ADDR = "192.168.2.23"
-SERVOS = [("right", 18, (1350, 1500, 2250)),    # (Name, Pin, (Open, Threshold, Close))
-          ("left", 13, (1650, 1000, 750))]              
-DHT = [("right", "AM2320", 23, True),           # (Name, Model, Pin)
+SERVOS = [("right", 18, (870, 1900)),       # (Name, Pin, (Open [up], Close))
+          ("left", 13, (2195, 1300))]              
+DHT = [("right", "AM2320", 23, True),       # (Name, Model, Pin, Pullup)
        ("left", "AM2320", 6, True),
        ("light", "DHT11", 22, False)]
 FAN_PIN = 26
 TEMP_DIFF_FAN = 4
 RH_DIFF_FAN = 10
-TEMP_THRESH = (2, 4)      # Delta from set temp before action is taken (response, emergency)
+TEMP_THRESH = (2, 4)                        # Delta from set temp before action is taken (response, emergency)
 INSTALLED_MOISTURE_SENSORS = [0, 1, 2]
-MOISTURE_SENSOR_THRESHOLD = 15000
+SOIL_THRESH = 18000                         # Threshold (Dry = 23200, Wet = 10200)
 
 lastCheckL = None   # Last check for lights
 lastCheckM = None   # Last check for moisture sensor
@@ -51,12 +51,14 @@ def init():
     global lastCheckL, lastCheckM, pi, DHTSensors, fan, lights, servos, notify
 
     # create pigpio instance
-    pi = gpio.init()
+    pi = gpio.pi()
 
     # init Notify
     notify = Notify()
 
     # init Sensors
+    pi.set_mode(5, gpio.OUTPUT)
+    pi.write(5, 1)
     DHTSensors = DHTC(pi, DHT)
 
     # init Fan
@@ -65,7 +67,7 @@ def init():
     # init ADC for moisture sensor
     mSensor = ADS1115C(pi, 0x48, INSTALLED_MOISTURE_SENSORS)
     mData = mSensor.readAll()
-    ADS1115C.checkData(mData, notify, MOISTURE_SENSOR_THRESHOLD)
+    ADS1115C.checkData(mData, notify, SOIL_THRESH)
     lastCheckM = cTime.nowf()
 
     # init Servos
@@ -89,9 +91,13 @@ def loop():
     lightState = ON
     currState = 0
 
-    DHTSensors.getData()
+    DHTData = DHTSensors.getData()
     minTemp, maxTemp, avgTemp = DHTSensors.getTempSummary(ignore=["light"])
     minRH, maxRH = DHTSensors.getRHSummary()
+
+    print("Current Time: {}".format(currentTime))
+    print("Tempretures are: {}, {}, Light: {}".format(DHTData["left"]["temp"], DHTData["right"]["temp"], DHTData["light"]["temp"]))
+    print("RH Values are: {}, {}, Light: {}".format(DHTData["left"]["RH"], DHTData["right"]["RH"], DHTData["right"]["RH"]))
 
     # If daylight hours.
     if cTime.between(currentTime, runTime):
@@ -183,10 +189,13 @@ def loop():
         lights.updateState(PLUG_ADDR)
 
     # Check moisture sensor
-    if cTime.diff(lastCheckM, unformattedTime) > SPCHECK_INTERVAL:
+    if cTime.diff(lastCheckM, unformattedTime) > MOISTURE_SENSOR_CHK_INTERVALL:
         lastCheckM = cTime.nowf()
         mData = mSensor.readAll()
-        ADS1115C.checkData(mData, notify, MOISTURE_SENSOR_THRESHOLD)
+        ADS1115C.checkData(mData, notify, SOIL_THRESH)
+
+    print("Soil Moisture Sensors Report: {}, {}, {} out of {}".format(mData[0], mData[1]. mData[2], SOIL_THRESH[1]))
+    print("")
 
     cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
     return
@@ -195,5 +204,5 @@ def loop():
 if __name__ == "__main__":
     init()
 
-    while True:
-        loop()
+    #while True:
+    #    loop()

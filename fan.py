@@ -23,3 +23,18 @@ class Fan:
 
     def set(self, state):
         self.pi.write(self.pin, state)
+
+
+if __name__ == "__main__":
+    import sys
+
+    pi = gpio.pi()
+    fan = Fan(pi, int(sys.argv[1]))
+
+    if sys.argv[2] == "off":
+        fan.off()
+    elif sys.argv[2] == "on":
+        fan.on()
+
+    print("pin: {}".format(int(sys.argv[1])))
+    print("value: {}".format(pi.read(int(sys.argv[1]))))

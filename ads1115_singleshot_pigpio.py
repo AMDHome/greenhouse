@@ -112,7 +112,7 @@ class ADS1115:
     def checkData(data, notifier, threshold):
         for i in data:
             if data[i] > threshold:
-                notifier.send("Greenhouse - Moisture Sensor " + i + " is too dry")
+                notifier.send("Greenhouse - Moisture Sensor " + str(i) + " is too dry")
 
 
     # Reads all sensors as defined by self.sensors and returns data as dict
@@ -120,7 +120,7 @@ class ADS1115:
         data = {}
 
         for i in self.sensors:
-            data[i] = read(i)
+            data[i] = self.read(i)
 
         return data
 
@@ -163,19 +163,28 @@ class ADS1115:
 
 
 if __name__ == "__main__":
-    import pigpio
 
+    import pigpio
+    import sys
     pi = pigpio.pi()
 
-    device = ads1115(pi, 0x48)
+    def test():
 
-    adcValue1 = device.read(0)
-    adcVoltage1 = device.raw_to_voltage(adcValue1)
+        device = ads1115(pi, 0x48)
 
-    adcVoltage2 = device.getVoltage(0)
+        adcValue1 = device.read(0)
+        adcVoltage1 = device.raw_to_voltage(adcValue1)
 
-    print("The ADC read a value of {:d}, which is {:3.2f} at the current gain settings".format(adcValue1, adcVoltage1))
-    print("The ADC read a second voltage of {:3.2f}".format(adcVoltage2))
+        adcVoltage2 = device.getVoltage(0)
 
-    device.stop()
-    pi.stop()
+        print("The ADC read a value of {:d}, which is {:3.2f} at the current gain settings".format(adcValue1, adcVoltage1))
+        print("The ADC read a second voltage of {:3.2f}".format(adcVoltage2))
+
+        device.stop()
+        pi.stop()
+
+    mSensor = ADS1115(pi, 0x48, [int(sys.argv[1])])
+    mData = mSensor.readAll()
+    for i in mData:
+        print(mData[i])
+    #ADS1115.checkData(mData, notify, 15000)

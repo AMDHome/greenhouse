@@ -1,6 +1,21 @@
 import tplink_protocol as plugs
 import cTime
 
+# Predefined Smart Plug Commands
+# For a full list of commands, consult tplink_commands.txt
+commands = {'info'     : '{"system":{"get_sysinfo":{}}}',
+            'on'       : '{"system":{"set_relay_state":{"state":1}}}',
+            'off'      : '{"system":{"set_relay_state":{"state":0}}}',
+            'cloudinfo': '{"cnCloud":{"get_info":{}}}',
+            'wlanscan' : '{"netif":{"get_scaninfo":{"refresh":0}}}',
+            'time'     : '{"time":{"get_time":{}}}',
+            'schedule' : '{"schedule":{"get_rules":{}}}',
+            'countdown': '{"count_down":{"get_rules":{}}}',
+            'antitheft': '{"anti_theft":{"get_rules":{}}}',
+            'reboot'   : '{"system":{"reboot":{"delay":1}}}',
+            'reset'    : '{"system":{"reset":{"delay":1}}}',
+            'energy'   : '{"emeter":{"get_realtime":{}}}'
+}
 
 class Smartplug:
     def __init__(self, ip):

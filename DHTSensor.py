@@ -263,10 +263,11 @@ if __name__ == "__main__":
    # Intervals of about 2 seconds or less will eventually hang the DHT
 
    pi = pigpio.pi()
-
-   s = DHTSensor.sensor(pi, 23, "DHT11")
-   s2 = DHTSensor.sensor(pi, 24, "DHT22", pullup=True)
-   s3 = DHTSensor.sensor(pi, 5, "DHT22", pullup=True)
+   pi.set_mode(5, pigpio.OUTPUT)
+   pi.write(5, 1)
+   s = DHTSensor.sensor(pi, 22, "DHT11")
+   s2 = DHTSensor.sensor(pi, 23, "DHT22", pullup=True)
+   s3 = DHTSensor.sensor(pi, 6, "DHT22", pullup=True)
 
    r = 0
 
