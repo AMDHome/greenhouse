@@ -25,9 +25,9 @@ class Smartplug:
 
     def set(self, newState):
         if newState == 1:
-            on(self.ip)
+            self.on(self.ip)
         elif newState == 0:
-            off(self.ip)
+            self.off(self.ip)
 
 
     def on(self, ip):
