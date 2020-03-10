@@ -37,7 +37,8 @@ lastCheckM = None   # Last check for moisture sensor
 prevState = 0       # State of system since last run (-1: cold, 0: normal, 1 hot)
 
 # Settings
-runTime = [ "07:00:00", "00:00:00" ]
+runTime = [ "07:00:00", "22:00:00" ]
+tempGraceTime = [ "08:00:00", "03:00:00" ]  # Time in which temp notifications wont be sent
 tempSet = [ 77,  None ]
 
 # Object variables
@@ -52,6 +53,8 @@ notify = None
 
 def init():
     global lastCheckL, lastCheckM, pi, DHTSensors, fan, lights, servos, notify
+
+    print("Initializing...")
 
     # create pigpio instance
     pi = gpio.pi()
@@ -70,24 +73,27 @@ def init():
     # init ADC for moisture sensor
     mSensor = ADS1115C(pi, 0x48, INSTALLED_MOISTURE_SENSORS)
     mData = mSensor.readAll()
-    ADS1115C.checkData(mData, notify, SOIL_THRESH)
-    lastCheckM = cTime.nowf()
+    logSoilData(mData)
+    #ADS1115C.checkData(mData, notify, SOIL_THRESH)
+    lastCheckM = cTime.now()
 
     # init Servos
     servos = servosC(pi, SERVOS, fan)
     
     # init Smartplug
     lights = smartplugC(PLUG_ADDR)
-    lastCheckL = cTime.nowf()
+    lastCheckL = cTime.now()
 
 
-def output():
-    print(lights.updateState())
-    DHTSensors.output()
+def logSoilData(data):
+    print("Soil Moisture Sensors Report: {:.2f}% [{}], {:.2f}% [{}], and {:.2f}% [{}]".format(
+                                        (1 - ((data[0] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[0],
+                                        (1 - ((data[1] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[1],
+                                        (1 - ((data[2] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[2]))
 
 
 def loop():
-    global lastCheckL, prevState
+    global lastCheckL, lastCheckM, prevState
 
     currentTime, unformattedTime = cTime.all()
     fanState = servoState = OFF
@@ -99,8 +105,8 @@ def loop():
     minRH, maxRH = DHTSensors.getRHSummary()
 
     print("Current Time: {}".format(currentTime))
-    print("Tempretures are: {}, {}, Light: {}".format(DHTData["left"]["temp"], DHTData["right"]["temp"], DHTData["light"]["temp"]))
-    print("RH Values are: {}, {}, Light: {}".format(DHTData["left"]["RH"], DHTData["right"]["RH"], DHTData["right"]["RH"]))
+    print("Tempretures are: {:.2f}°F, {:.2f}°F, Light: {:.2f}°F".format(DHTData["left"]["temp"], DHTData["right"]["temp"], DHTData["light"]["temp"]))
+    print("RH Values are: {:.2f}%, {:.2f}%, Light: {:.2f}%".format(DHTData["left"]["RH"], DHTData["right"]["RH"], DHTData["right"]["RH"]))
 
     # If daylight hours.
     if cTime.between(currentTime, runTime):
@@ -121,7 +127,7 @@ def loop():
                 print(msg, file=sys.stderr)
                 fanState = ON
                 servoState = OFF
-                if prevState == 0:
+                if (not cTime.between(currentTime, [runTime[0], tempGraceTime[0]])) and prevState == 0:
                     notify.send("Greenhouse - " + msg)
                     currState = -1
 
@@ -135,7 +141,7 @@ def loop():
                     msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS"
                     print(msg, file=sys.stderr)
                     lightState = OFF    # Turn off heat source
-                    if prevState == 0:
+                    if (not cTime.between(currentTime, [runTime[0], tempGraceTime[0]])) and prevState == 0:
                         notify.send("Greenhouse - " + msg)
                         currState = 1
 
@@ -157,7 +163,7 @@ def loop():
                 lightState = ON
                 fanState = ON
                 servoState = OFF
-                if prevState == 0:
+                if (not cTime.between(currentTime, [runTime[1], tempGraceTime[1]])) and prevState == 0:
                     notify.send("Greenhouse - " + msg)
                     currState = -1
 
@@ -171,7 +177,7 @@ def loop():
                 if tempSet[1] + TEMP_THRESH[1] < avgTemp:
                     msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS"
                     print(msg, file=sys.stderr)
-                    if prevState == 0:
+                    if (not cTime.between(currentTime, [runTime[1], tempGraceTime[1]])) and prevState == 0:
                         notify.send("Greenhouse - " + msg)
                         currState = 1
 
@@ -191,27 +197,27 @@ def loop():
 
     # Check to see if we need to update smartplug data
     if cTime.diff(lastCheckL, unformattedTime) > SPCHECK_INTERVAL:
-        lastCheckL = cTime.nowf()
+        lastCheckL = cTime.now()
         lights.updateState(PLUG_ADDR)
 
     # Check moisture sensor
-    if cTime.diff(lastCheckM, unformattedTime) > MOISTURE_SENSOR_CHK_INTERVALL:
-        lastCheckM = cTime.nowf()
+    if cTime.diff(lastCheckM, unformattedTime) > MOISTURE_SENSOR_CHK_INTERVAL:
+        lastCheckM = cTime.now()
         mData = mSensor.readAll()
+        logSoilData(mData)
         ADS1115C.checkData(mData, notify, SOIL_THRESH)
 
-    print("Soil Moisture Sensors Report: {:3.2}% [{}], {:3.2}% [{}], and {:3.2}% [{}]".format(
-                                        (1 - ((mData[0] - SOIL_THRESH[1]) / SOIL_DELTA)) * 100, mData[0],
-                                        (1 - ((mData[1] - SOIL_THRESH[1]) / SOIL_DELTA)) * 100, mData[1],
-                                        (1 - ((mData[2] - SOIL_THRESH[1]) / SOIL_DELTA)) * 100, mData[2]))
     print("")
 
-    cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
+    #cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
     return
 
 
 if __name__ == "__main__":
     init()
 
-    #while True:
-    #    loop()
+    print("")
+    print("Starting Loop")
+    
+    while True:
+        loop()
