@@ -10,19 +10,26 @@ class Fan:
         self.pi.write(self.pin, 0)
 
 
-    def on(self):
+    def on(self, silent=False):
         self.pi.write(self.pin, 1)
-        print(cTime.nowf() + " - ACTION: Fan On")
+        if not silent:
+            print(cTime.nowf() + " - ACTION: Fan On")
 
-    def off(self):
+    def off(self, silent=False):
         self.pi.write(self.pin, 0)
-        print(cTime.nowf() + " - ACTION: Fan Off")
+        if not silent:
+            print(cTime.nowf() + " - ACTION: Fan Off")
 
     def state(self):
         return self.pi.read(self.pin)
 
-    def set(self, state):
+    def set(self, state, silent=False):
         self.pi.write(self.pin, state)
+        if not silent:
+            if state == 0:
+                print(cTime.nowf() + " - ACTION: Fan Off")
+            elif state == 1:
+                print(cTime.nowf() + " - ACTION: Fan On")
 
 
 if __name__ == "__main__":

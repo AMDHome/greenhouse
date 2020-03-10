@@ -59,7 +59,7 @@ class Servo:
     def chgState(self, newState, hold=False):
         if self.fan:
             fstate = self.fan.state()
-            self.fan.off()
+            self.fan.off(silent=True)
 
         totalMovement = newState - self.state
         mvmtPtick = totalMovement // 100
@@ -85,7 +85,7 @@ class Servo:
             self.pi.set_servo_pulsewidth(self.pin, 0)
 
         if self.fan:
-            self.fan.set(fstate)
+            self.fan.set(fstate, silent=True)
 
 
     # Does not change the self.state variable. Please run set(0) or close() when finished
@@ -93,7 +93,7 @@ class Servo:
     def chgStateNS(pi, pin, newState, currState=500, dirOpen="cc", hold=False, fan=None):
         if fan:
             fstate = fan.state()
-            fan.off()
+            fan.off(silent=True)
 
         if currState == 500:
             pi.set_servo_pulsewidth(pin, 500)
@@ -129,7 +129,7 @@ class Servo:
             pi.set_servo_pulsewidth(pin, 0)
 
         if fan:
-            fan.set(fstate)
+            fan.set(fstate, silent=True)
 
 
     # Does not change the self.state variable. Please run set(0) or close() when finished
@@ -138,7 +138,7 @@ class Servo:
     def chgStateN(pi, pin, newState, hold=False, fan=None):
         if fan:
             fstate = fan.state()
-            fan.off()
+            fan.off(silent=True)
 
         pi.set_servo_pulsewidth(pin, newState)
         if not hold:
@@ -146,7 +146,7 @@ class Servo:
             pi.set_servo_pulsewidth(pin, 0)
 
         if fan:
-            fan.set(fstate)
+            fan.set(fstate, silent=True)
 
 
     def getState(self):
