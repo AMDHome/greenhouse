@@ -12,11 +12,11 @@ class Fan:
 
     def on(self):
         self.pi.write(self.pin, 1)
-        print(cTime.nowf() + " - ACTION Fan On")
+        print(cTime.nowf() + " - ACTION: Fan On")
 
     def off(self):
         self.pi.write(self.pin, 0)
-        print(cTime.nowf() + " - ACTION Fan Off")
+        print(cTime.nowf() + " - ACTION: Fan Off")
 
     def state(self):
         return self.pi.read(self.pin)

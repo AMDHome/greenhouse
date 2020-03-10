@@ -96,7 +96,7 @@ def send(ip, cmd, port=9999, output=False):
 
 		return data
 	except socket.error:
-		print("Cound not connect to host " + ip + ":" + str(port), file=sys.stderr)
+		print(cTime.nowf() + " - ALERT: Cound not connect to host " + ip + ":" + str(port), file=sys.stderr)
 
 
 if __name__ == "__main__":

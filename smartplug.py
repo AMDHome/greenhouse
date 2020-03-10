@@ -33,18 +33,21 @@ class Smartplug:
     def on(self, ip):
         if self.state == 0:
             if plugs.send(self.ip, commands["on"])["system"]["set_relay_state"]["err_code"] == 0:
-                print(cTime.nowf() + " - ACTION Lights On")
+                print(cTime.nowf() + " - ACTION: Lights On")
                 self.state = 1 
                 return 0
+            else:
+                print(cTime.nowf() + " - ALERT: Failed to turn lights on", file=sys.stderr)
 
 
     def off(self, ip):
         if self.state == 1:
             if plugs.send(self.ip, commands["off"])["system"]["set_relay_state"]["err_code"] == 0:
-                print(cTime.nowf() + " - ACTION Lights Off")
+                print(cTime.nowf() + " - ACTION: Lights Off")
                 self.state = 0
                 return 0
-
+            else:
+                print(cTime.nowf() + " - ALERT: Failed to turn lights off", file=sys.stderr)
 
     def getState(self):
         return self.state
