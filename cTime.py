@@ -24,6 +24,4 @@ def between(time, time_range):
     return time_range[0] <= time <= time_range[1]
 
 def diff(earlier_time, curr_time):
-    if curr_time.hour < earlier_time.hour:
-        return None
     return (curr_time - earlier_time).seconds
