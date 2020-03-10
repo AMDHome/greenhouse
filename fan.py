@@ -11,14 +11,16 @@ class Fan:
 
 
     def on(self, silent=False):
-        self.pi.write(self.pin, 1)
-        if not silent:
-            print(cTime.nowf() + " - ACTION: Fan On")
+        if self.state() == 0:
+            self.pi.write(self.pin, 1)
+            if not silent:
+                print(cTime.nowf() + " - ACTION: Fan On")
 
     def off(self, silent=False):
-        self.pi.write(self.pin, 0)
-        if not silent:
-            print(cTime.nowf() + " - ACTION: Fan Off")
+        if self.state() == 1:
+            self.pi.write(self.pin, 0)
+            if not silent:
+                print(cTime.nowf() + " - ACTION: Fan Off")
 
     def state(self):
         return self.pi.read(self.pin)
@@ -26,9 +28,9 @@ class Fan:
     def set(self, state, silent=False):
         self.pi.write(self.pin, state)
         if not silent:
-            if state == 0:
+            if state == 0 and self.state() == 1:
                 print(cTime.nowf() + " - ACTION: Fan Off")
-            elif state == 1:
+            elif state == 1 and self.state() == 0:
                 print(cTime.nowf() + " - ACTION: Fan On")
 
 

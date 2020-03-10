@@ -47,13 +47,15 @@ class Servo:
 
 
     def open(self):
-        self.chgState(self.states[1])
-        print(cTime.nowf() + " - ACTION: Servo " + self.name + " Open")
+        if self.state != self.states[1]:
+            self.chgState(self.states[1])
+            print(cTime.nowf() + " - ACTION: Servo " + self.name + " Open")
 
 
     def close(self):
-        self.chgState(self.states[0])
-        print(cTime.nowf() + " - ACTION: Servo " + self.name + " Closed")
+        if self.state != self.states[1]:
+            self.chgState(self.states[0])
+            print(cTime.nowf() + " - ACTION: Servo " + self.name + " Closed")
     
 
     def chgState(self, newState, hold=False):
