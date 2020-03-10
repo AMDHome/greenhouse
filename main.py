@@ -2,6 +2,7 @@
 
 import cTime
 import pigpio as gpio
+import sys
 from ads1115_singleshot_pigpio import ADS1115 as ADS1115C
 from DHTWrapper import DHT as DHTC
 from fan import Fan as fanC
@@ -28,6 +29,8 @@ RH_DIFF_FAN = 10
 TEMP_THRESH = (2, 4)                        # Delta from set temp before action is taken (response, emergency)
 INSTALLED_MOISTURE_SENSORS = [0, 1, 2]
 SOIL_THRESH = 18000                         # Threshold (Dry = 23200, Wet = 10200)
+SOIL_LIMITS = [23200, 10200]
+SOIL_DELTA = 13000
 
 lastCheckL = None   # Last check for lights
 lastCheckM = None   # Last check for moisture sensor
@@ -115,8 +118,9 @@ def loop():
             # If below "emergency" setting levels
             if tempSet[0] - TEMP_THRESH[1] > avgTemp:
                 msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS"
-                print(msg)
+                print(msg, file=sys.stderr)
                 fanState = ON
+                servoState = OFF
                 if prevState == 0:
                     notify.send("Greenhouse - " + msg)
                     currState = -1
@@ -124,12 +128,12 @@ def loop():
             # If too hot (avgTemp is above bounds)
             elif tempSet[0] + TEMP_THRESH[0] < avgTemp:
                 servoState = ON     # VENT
+                fanState = ON       # Turn on forced ventilation
 
                 # If above "emergency" setting levels
                 if tempSet[0] + TEMP_THRESH[1] < avgTemp:
                     msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS"
-                    print(msg)
-                    fanState = ON       # Turn on forced ventilation
+                    print(msg, file=sys.stderr)
                     lightState = OFF    # Turn off heat source
                     if prevState == 0:
                         notify.send("Greenhouse - " + msg)
@@ -149,9 +153,10 @@ def loop():
             # If below "emergency" setting levels
             if tempSet[1] - TEMP_THRESH[1] > avgTemp:
                 msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS"
-                print(msg)
+                print(msg, file=sys.stderr)
                 lightState = ON
                 fanState = ON
+                servoState = OFF
                 if prevState == 0:
                     notify.send("Greenhouse - " + msg)
                     currState = -1
@@ -159,12 +164,13 @@ def loop():
             # If avgTemp is above bounds
             elif tempSet[1] + TEMP_THRESH[0] < avgTemp:
                 servoState = ON
+                fanState = ON     # Turn on forced ventilation
 
+                # Not much we can do if still too hot, send notificaiton
                 # If above "emergency" setting levels
                 if tempSet[1] + TEMP_THRESH[1] < avgTemp:
                     msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS"
-                    print(msg)
-                    fanState = ON     # Turn on forced ventilation
+                    print(msg, file=sys.stderr)
                     if prevState == 0:
                         notify.send("Greenhouse - " + msg)
                         currState = 1
@@ -194,7 +200,10 @@ def loop():
         mData = mSensor.readAll()
         ADS1115C.checkData(mData, notify, SOIL_THRESH)
 
-    print("Soil Moisture Sensors Report: {}, {}, {} out of {}".format(mData[0], mData[1]. mData[2], SOIL_THRESH[1]))
+    print("Soil Moisture Sensors Report: {:3.2}% [{}], {:3.2}% [{}], and {:3.2}% [{}]".format(
+                                        (1 - ((mData[0] - SOIL_THRESH[1]) / SOIL_DELTA)) * 100, mData[0],
+                                        (1 - ((mData[1] - SOIL_THRESH[1]) / SOIL_DELTA)) * 100, mData[1],
+                                        (1 - ((mData[2] - SOIL_THRESH[1]) / SOIL_DELTA)) * 100, mData[2]))
     print("")
 
     cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
