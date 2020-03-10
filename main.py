@@ -123,7 +123,7 @@ def loop():
             # If past emergency levels, turn on fan to generate heat and circulate hot air down 
             # If below "emergency" setting levels
             if tempSet[0] - TEMP_THRESH[1] > avgTemp:
-                msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS: " + str(avgTemp) + "°F"
+                msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS: {:.2f}°F".format(avgTemp)
                 print(msg + "\n", file=sys.stderr)
                 fanState = ON
                 servoState = OFF
@@ -138,7 +138,7 @@ def loop():
 
                 # If above "emergency" setting levels
                 if tempSet[0] + TEMP_THRESH[1] < avgTemp:
-                    msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS: " + str(avgTemp) + "°F"
+                    msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS: {:.2f}°F".format(avgTemp)
                     print(msg + "\n", file=sys.stderr)
                     lightState = OFF    # Turn off heat source
                     if (not cTime.between(currentTime, [runTime[0], tempGraceTime[0]])) and prevState == 0:
@@ -158,7 +158,7 @@ def loop():
             # Only turn on lights at night if we hit emergency levels of cold
             # If below "emergency" setting levels
             if tempSet[1] - TEMP_THRESH[1] > avgTemp:
-                msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS: " + str(avgTemp) + "°F"
+                msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS: {:.2f}°F".format(avgTemp)
                 print(msg + "\n", file=sys.stderr)
                 lightState = ON
                 fanState = ON
@@ -175,7 +175,7 @@ def loop():
                 # Not much we can do if still too hot, send notificaiton
                 # If above "emergency" setting levels
                 if tempSet[1] + TEMP_THRESH[1] < avgTemp:
-                    msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS: " + str(avgTemp) + "°F"
+                    msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS: {:.2f}°F".format(avgTemp)
                     print(msg + "\n", file=sys.stderr)
                     if (not cTime.between(currentTime, [runTime[1], tempGraceTime[1]])) and prevState == 0:
                         notify.send("Greenhouse - " + msg)
