@@ -1,0 +1,1 @@
+(python3 -u main.py | tee -a ./logs/output.log) 3>&1 1>&2 2>&3 | tee -a ./logs/error.log
