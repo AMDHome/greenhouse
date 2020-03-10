@@ -53,7 +53,7 @@ class Servo:
 
 
     def close(self):
-        if self.state != self.states[1]:
+        if self.state != self.states[0]:
             self.chgState(self.states[0])
             print(cTime.nowf() + " - ACTION: Servo " + self.name + " Closed")
     
