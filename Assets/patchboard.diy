@@ -835,8 +835,8 @@
       <alpha>127</alpha>
       <points>
         <point x="4.2" y="4.5"/>
+        <point x="4.8" y="4.5"/>
         <point x="4.5" y="4.5"/>
-        <point x="4.35" y="4.5"/>
       </points>
       <bodyColor hex="ffffff"/>
       <borderColor hex="000000"/>
@@ -2349,6 +2349,29 @@
       <borderThickness value="0.2" unit="mm"/>
       <edgeRadius value="0.0" unit="mm"/>
     </diylc.shapes.Rectangle>
+    <diylc.passive.Resistor>
+      <name>R3</name>
+      <alpha>83</alpha>
+      <length value="0.25" unit="in"/>
+      <width value="0.09" unit="in"/>
+      <points>
+        <point x="4.8" y="4.5"/>
+        <point x="5.1" y="4.5"/>
+        <point x="4.925" y="4.5"/>
+      </points>
+      <bodyColor hex="82cffd"/>
+      <borderColor hex="5b90b1"/>
+      <labelColor hex="000000"/>
+      <leadColor hex="cccccc"/>
+      <display>VALUE</display>
+      <flipStanding>false</flipStanding>
+      <labelOriantation>Directional</labelOriantation>
+      <moveLabel>false</moveLabel>
+      <value value="5.1" unit="K"/>
+      <power>HALF</power>
+      <colorCode>_5_BAND</colorCode>
+      <shape>Tubular</shape>
+    </diylc.passive.Resistor>
   </components>
   <groups/>
   <lockedLayers/>
