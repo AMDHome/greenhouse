@@ -1,1 +1,2 @@
-(python3 -u main.py | tee -a ./logs/output.log) 3>&1 1>&2 2>&3 | tee -a ./logs/error.log
+#!/bin/bash
+(python3 -u /home/amdhome/greenhouse/main.py | tee -a /home/amdhome/greenhouse/logs/output.log) 3>&1 1>&2 2>&3 | tee -a /home/amdhome/greenhouse/logs/error.log

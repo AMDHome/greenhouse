@@ -1,1 +1,8 @@
-tmux new -d -s "gh" launcher
+#!/bin/bash
+
+if ! pgrep -x "pigpiod" > /dev/null
+then
+        sudo pigpiod
+fi
+
+tmux new -d -s gh \; send-keys "/home/amdhome/greenhouse/launcher" Enter
