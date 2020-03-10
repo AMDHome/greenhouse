@@ -209,7 +209,7 @@ def loop():
 
     print("")
 
-    #cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
+    cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
     return
 
 
