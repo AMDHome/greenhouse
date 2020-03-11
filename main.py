@@ -32,27 +32,27 @@ SOIL_THRESH = 17920                         # Threshold (Dry = 23200, Wet = 1000
 SOIL_LIMITS = [23200, 10000]
 SOIL_DELTA = 13200
 
-lastCheckL = None   # Last check for lights
+lastCheckL = None   # Last check for light
 lastCheckM = None   # Last check for moisture sensor
-prevState = 0       # State of system since last run (-1: cold, 0: normal, 1 hot)
+lastState = None    # State of system since last run (-1: cold, 0: normal, 1 hot)
 
 # Settings
 runTime = [ "07:00:00", "22:00:00" ]
 tempGraceTime = [ "08:00:00", "03:00:00" ]  # Time in which temp notifications wont be sent
-tempSet = [ 77,  None ]
+tempSet = [ 78,  None ]
 
 # Object variables
 pi = None
 DHTSensors = None
 fan = None
-lights = None
+light = None
 servos = None
 mSensor = None
 notify = None
 
 
 def init():
-    global lastCheckL, lastCheckM, pi, DHTSensors, fan, lights, servos, mSensor, notify
+    global lastCheckL, lastCheckM, pi, DHTSensors, fan, light, servos, mSensor, notify
 
     print("Initializing...")
 
@@ -81,8 +81,18 @@ def init():
     servos = servosC(pi, SERVOS, fan)
     
     # init Smartplug
-    lights = smartplugC(PLUG_ADDR)
+    light = smartplugC(PLUG_ADDR)
     lastCheckL = cTime.now()
+
+    # init State
+    lastState = -1
+    if cTime.between(cTime.nowf(), runTime):
+        light.set(ON)
+    else:
+        light.set(OFF)
+
+    fan.set(OFF)
+    servos.all(OFF)
 
 
 def logSoilData(data):
@@ -92,94 +102,179 @@ def logSoilData(data):
                                         (1 - ((data[2] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[2]))
 
 
+def sendNotification(msg, outfile=sys.stdout):
+    global notify
+    print(msg, file=outfile)
+    notify.send("Greenhouse - " + msg)
+
+
+def printReturn(avgTemp):
+    msg = cTime.nowf() + " - INFO: TEMP VALUES HAVE RETURNED TO NORMAL: {:.2f}°F".format(avgTemp)
+    sendNotification(msg)
+
+
+def printHigh(avgTemp):
+    msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS: {:.2f}°F".format(avgTemp)
+    sendNotification(msg, outfile=sys.stderr)
+
+
+def printLow(avgTemp):
+    msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS: {:.2f}°F".format(avgTemp)
+    sendNotification(msg, outfile=sys.stderr)
+
+
 def loop():
-    global lastCheckL, lastCheckM, prevState
+    global lastCheckL, lastCheckM, lastState
 
     currentTime, unformattedTime = cTime.all()
-    fanState = servoState = OFF
-    lightState = ON
-    currState = 0
+    fanState = fan.state()
+    servoState = servos.state()
+    lightState = light.getState()
+    updateState = False
+
+    targetTemp = None
+    cycle = None
 
     DHTData = DHTSensors.getData()
     minTemp, maxTemp, avgTemp = DHTSensors.getTempSummary(ignore=["light"])
     minRH, maxRH = DHTSensors.getRHSummary(ignore=["light"])
 
     print("Current Time: {}".format(currentTime))
-    print("Tempretures are: {:.2f}°F, {:.2f}°F, Light: {:.2f}°F".format(DHTData["left"]["temp"], DHTData["right"]["temp"], DHTData["light"]["temp"]))
+    print("Tempretures are: {:.2f}°F, {:.2f}°F, Light: {:.2f}°F - Average: {:.2f}°F".format(DHTData["left"]["temp"], DHTData["right"]["temp"], DHTData["light"]["temp"], avgTemp))
     print("RH Values are: {:.2f}%, {:.2f}%, Light: {:.2f}%".format(DHTData["left"]["RH"], DHTData["right"]["RH"], DHTData["light"]["RH"]))
+
+
+
 
     # If daylight hours.
     if cTime.between(currentTime, runTime):
-        lightState = ON
-
         # If there is no temp setting
         if tempSet[0] is None:
             servoState = ON
-
-        # If there is a temp setting
+            fanState = ON
         else:
+            targetTemp = tempSet[0]
+            cycle = 0
 
-            # Can't do much if too cold. The main heat source (Lights) are already on.
-            # If past emergency levels, turn on fan to generate heat and circulate hot air down 
-            # If below "emergency" setting levels
-            if tempSet[0] - TEMP_THRESH[1] > avgTemp:
-                msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS: {:.2f}°F".format(avgTemp)
-                print(msg + "\n", file=sys.stderr)
-                fanState = ON
-                servoState = OFF
-                if (not cTime.between(currentTime, [runTime[0], tempGraceTime[0]])) and prevState == 0:
-                    notify.send("Greenhouse - " + msg)
-                    currState = -1
-
-            # If too hot (avgTemp is above bounds)
-            elif tempSet[0] + TEMP_THRESH[0] < avgTemp:
-                servoState = ON     # VENT
-                fanState = ON       # Turn on forced ventilation
-
-                # If above "emergency" setting levels
-                if tempSet[0] + TEMP_THRESH[1] < avgTemp:
-                    msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS: {:.2f}°F".format(avgTemp)
-                    print(msg + "\n", file=sys.stderr)
-                    lightState = OFF    # Turn off heat source
-                    if (not cTime.between(currentTime, [runTime[0], tempGraceTime[0]])) and prevState == 0:
-                        notify.send("Greenhouse - " + msg)
-                        currState = 1
-
-    # If night hours
+    # Nighttime
     else:
-        lightState = OFF
-
         # If there is no temp setting
         if tempSet[1] is None:
             servoState = OFF
-
-         # If there is a temp setting
         else:
-            # Only turn on lights at night if we hit emergency levels of cold
-            # If below "emergency" setting levels
-            if tempSet[1] - TEMP_THRESH[1] > avgTemp:
-                msg = cTime.nowf() + " - ALERT: TEMP VALUES BELOW E LEVELS: {:.2f}°F".format(avgTemp)
-                print(msg + "\n", file=sys.stderr)
-                lightState = ON
-                fanState = ON
-                servoState = OFF
-                if (not cTime.between(currentTime, [runTime[1], tempGraceTime[1]])) and prevState == 0:
-                    notify.send("Greenhouse - " + msg)
-                    currState = -1
+            targetTemp = tempSet[0]
+            cycle = 1
 
-            # If avgTemp is above bounds
-            elif tempSet[1] + TEMP_THRESH[0] < avgTemp:
+
+    if targetTemp != None:
+        # Get Current State
+        # Hot Side
+        if targetTemp <= avgTemp:                           # Normal
+            newState = 1
+            if targetTemp + TEMP_THRESH[0] < avgTemp:       # Hot
+                newState = 2
+                if targetTemp + TEMP_THRESH[1] < avgTemp:   # E-Hot
+                    newState = 3
+
+        # Cold Side
+        elif targetTemp > avgTemp:                          # Normal
+            newState = -1
+            if targetTemp - TEMP_THRESH[0] > avgTemp:       # Cold
+                newState = -2
+                if targetTemp - TEMP_THRESH[1] > avgTemp:   # E-Cold
+                    newState = -3
+
+        # FSM Take action based on last state
+        # State 3
+        if lastState == -3:
+            if newState == 1:
+                if cycle == 1:          # If nighttime, turn off lights
+                    lightState = OFF
+                fanState = OFF
+                printReturn(avgTemp)
+                updateState = True
+            elif newState == 2:
+                if cycle == 1:          # If nighttime, turn off lights
+                    lightState = OFF
                 servoState = ON
-                fanState = ON     # Turn on forced ventilation
+                printReturn(avgTemp)
+                updateState = True
+            elif newState == 3:
+                lightState, servoState = OFF, ON
+                printHigh(avgTemp)
+                updateState = True
 
-                # Not much we can do if still too hot, send notificaiton
-                # If above "emergency" setting levels
-                if tempSet[1] + TEMP_THRESH[1] < avgTemp:
-                    msg = cTime.nowf() + " - ALERT: TEMP VALUES ABOVE E LEVELS: {:.2f}°F".format(avgTemp)
-                    print(msg + "\n", file=sys.stderr)
-                    if (not cTime.between(currentTime, [runTime[1], tempGraceTime[1]])) and prevState == 0:
-                        notify.send("Greenhouse - " + msg)
-                        currState = 1
+        elif lastState == -2:
+            if newState == -3:
+                if cycle == 1:
+                    lightState = ON
+                printLow(avgTemp)
+                updateState = True
+            elif newState == 1:
+                fanState = OFF
+                updateState = True
+            elif newState == 2:
+                servoState = ON
+                updateState = True
+            elif newState == 3:
+                lightState, servoState = OFF, ON
+                printHigh(avgTemp)
+                updateState = True
+
+        elif lastState == -1 or lastState == 1:
+            if newState == -3:
+                if cycle == 1:
+                    lightState = ON
+                fanState = ON
+                printLow(avgTemp)
+                updateState = True
+            elif newState == -2:
+                fanState = ON
+                updateState = True
+            elif newState == 2:
+                fanState, servoState = ON, ON
+                updateState = True
+            elif newState == 3:
+                lightState, fanState, servoState = OFF, ON, ON
+                printHigh(avgTemp)
+                updateState = True
+
+        elif lastState == 2:
+            if newState == -3:
+                if cycle == 1:
+                    lightState = ON
+                servoState = OFF
+                printLow(avgTemp)
+                updateState = True
+            elif newState == -2:
+                servoState = OFF
+                updateState = True
+            elif newState == -1:
+                fanState, servoState = OFF, OFF
+                updateState = True
+            elif newState == 3:
+                lightState = OFF
+                printHigh(avgTemp)
+                updateState = True
+
+        elif lastState == 3:
+            if newState == -3:
+                lightState, servoState = ON, OFF
+                printLow(avgTemp)
+                updateState = True
+            elif newState == -2:
+                if cycle == 0:
+                    lightState = ON
+                servoState = OFF
+                printReturn(avgTemp)
+                updateState = True
+            elif newState == -1:
+                if cycle == 0:
+                    lightState = ON
+                fanState, servoState = OFF, OFF
+                printReturn(avgTemp)
+                updateState = True
+                                            
 
     # If fan is not already on, check if we need to mix the air
     if fanState != ON:
@@ -189,16 +284,22 @@ def loop():
         if (maxRH - minRH) > RH_DIFF_FAN:
             fanState = ON
 
+        # Check light temprature
+        if DHTData["light"]["temp"] > 89:
+            fanState = ON
+        
+
     # Apply Changes
-    lights.set(lightState)
+    light.set(lightState)
     servos.all(servoState)
     fan.set(fanState)
-    prevState = currState
+    if updateState:
+        lastState = newState
 
     # Check to see if we need to update smartplug data
     if cTime.diff(lastCheckL, unformattedTime) > SPCHECK_INTERVAL:
         lastCheckL = cTime.now()
-        lights.updateState()
+        light.updateState()
 
     # Check moisture sensor
     if cTime.diff(lastCheckM, unformattedTime) > MOISTURE_SENSOR_CHK_INTERVAL:
@@ -208,6 +309,7 @@ def loop():
         ADS1115C.checkData(mData, notify, SOIL_THRESH)
 
     cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
+    print("")
     return
 
 

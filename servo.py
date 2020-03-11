@@ -21,6 +21,13 @@ class Servos:
         for i in self.servos:
             self.servos[i].set(newState)
 
+    def state(self):
+        for i in self.servos:
+            if self.servos[i].getState() == 1:
+                return 1
+
+        return 0
+
 
 
 # Indivisual servos
@@ -152,7 +159,7 @@ class Servo:
 
 
     def getState(self):
-        return self.state
+        return 1 if self.state - self.states[0] > 0 else 0
 
 
 if __name__ == "__main__":
