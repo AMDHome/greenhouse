@@ -43,6 +43,8 @@ class Servo:
         self.openDir = device[2][0] - device[2][1]
 
         self.pi.set_servo_pulsewidth(self.pin, self.states[0])
+        cTime.sleep(0.25)
+        self.pi.set_servo_pulsewidth(self.pin, 0)
         self.state = self.states[0]
 
         
