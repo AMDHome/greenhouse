@@ -12,6 +12,9 @@ def now():
 def nowf():
     return datetime.now().strftime("%H:%M:%S")
 
+def timeS():
+    return int(time.time())
+
 def currSec():
     return datetime.now().second
 

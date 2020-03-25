@@ -8,7 +8,9 @@ from DHTWrapper import DHT as DHTC
 from fan import Fan as fanC
 from servo import Servos as servosC
 from smartplug import Smartplug as smartplugC
+from smartstrip import Smartstrip as smartstripC
 from notify_run import Notify
+import os.path
 
 
 # Const values to make my life easier
@@ -18,6 +20,8 @@ SPCHECK_INTERVAL = 3600             # Time in seconds to update smartplug state 
 SYSTEM_LOOP_INTERVAL = 180          # Time in seconds between each iteration of main loop
 MOISTURE_SENSOR_CHK_INTERVAL = 900  # Time in seconds between each check of the moisture sensor
 PLUG_ADDR = "192.168.2.23"
+HEATPAD_ADDR = "192.168.2.24"
+HEATPAD_ID = "8006243BBCE51D149484EDC4D45C79131C5EAAE102"
 SERVOS = [("right", 18, (870, 1900)),       # (Name, Pin, (Open [up], Close))
           ("left", 13, (2195, 1300))]              
 DHT = [("right", "AM2320", 23, True),       # (Name, Model, Pin, Pullup)
@@ -31,6 +35,9 @@ INSTALLED_MOISTURE_SENSORS = [0, 1, 2]
 SOIL_THRESH = 17920                         # Threshold (Dry = 23200, Wet = 10000)
 SOIL_LIMITS = [23200, 10000]
 SOIL_DELTA = 13200
+LIGHT_MAX_TEMP = 110
+DHT_LOG = "/home/amdhome/greenhouse/logs/DHT.log"
+MOISTURE_LOG = "/home/amdhome/greenhouse/logs/theta.log"
 
 lastCheckL = None   # Last check for light
 lastCheckM = None   # Last check for moisture sensor
@@ -38,21 +45,30 @@ lastState = None    # State of system since last run (-1: cold, 0: normal, 1 hot
 
 # Settings
 runTime = [ "07:00:00", "22:00:00" ]
-tempGraceTime = [ "08:00:00", "03:00:00" ]  # Time in which temp notifications wont be sent
+tempGraceTime = [ "09:00:00", "00:01:00" ]  # Time in which temp notifications wont be sent
 tempSet = [ 78,  None ]
 
 # Object variables
 pi = None
 DHTSensors = None
 fan = None
+heatpad = None
 light = None
 servos = None
 mSensor = None
 notify = None
+logFileDHT = None
+logFileM = None
+
+targetTemp = None
+cycle = None
+
+queueNotification = None
 
 
 def init():
-    global lastCheckL, lastCheckM, pi, DHTSensors, fan, light, servos, mSensor, notify
+    global lastCheckL, lastCheckM, cycle
+    global pi, DHTSensors, fan, light, servos, mSensor, notify, logFileDHT, logFileM, heatpad
 
     print("Initializing...")
 
@@ -61,6 +77,17 @@ def init():
 
     # init Notify
     notify = Notify()
+
+    # open logFiles
+    file_exists = os.path.isfile(DHT_LOG)
+    logFileDHT = open(DHT_LOG, "a+", buffering=1)
+    if not file_exists:
+        logFileDHT.write("time, tempLeft, tempRight, tempLight, avgTemp, RHLeft, RHRight, RHLight\n")
+
+    file_exists = os.path.isfile(MOISTURE_LOG)
+    logFileM = open(MOISTURE_LOG, "a+", buffering=1)
+    if not file_exists:
+        logFileM.write("time, potLeft, rawLeft, potMid, rawMid, potRight, rawRight\n")
 
     # init Sensors
     pi.set_mode(5, gpio.OUTPUT)
@@ -73,7 +100,7 @@ def init():
     # init ADC for moisture sensor
     mSensor = ADS1115C(pi, 0x48, INSTALLED_MOISTURE_SENSORS)
     mData = mSensor.readAll()
-    logSoilData(mData)
+    logSoilData(cTime.nowf(), mData)
     #ADS1115C.checkData(mData, notify, SOIL_THRESH)
     lastCheckM = cTime.now()
 
@@ -84,19 +111,28 @@ def init():
     light = smartplugC(PLUG_ADDR)
     lastCheckL = cTime.now()
 
+    heatpad = smartstripC(HEATPAD_ADDR, HEATPAD_ID)
+
     # init State
     lastState = -1
     if cTime.between(cTime.nowf(), runTime):
+        cycle = 1
         light.set(ON)
     else:
+        cycle = 0
         light.set(OFF)
 
     fan.set(OFF)
     servos.all(OFF)
 
 
-def logSoilData(data):
+def logSoilData(currTime, data):
+    global logFileM
     print("Soil Moisture Sensors Report: {:.2f}% [{}], {:.2f}% [{}], and {:.2f}% [{}]".format(
+                                        (1 - ((data[0] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[0],
+                                        (1 - ((data[1] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[1],
+                                        (1 - ((data[2] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[2]))
+    logFileM.write("{}, {:.2f}, {}, {:.2f}, {}, {:.2f}, {}\n".format(currTime, 
                                         (1 - ((data[0] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[0],
                                         (1 - ((data[1] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[1],
                                         (1 - ((data[2] - SOIL_LIMITS[1]) / SOIL_DELTA)) * 100, data[2]))
@@ -123,17 +159,35 @@ def printLow(avgTemp):
     sendNotification(msg, outfile=sys.stderr)
 
 
+def processesNotif(avgTemp):
+    global queueNotification
+
+    currentTime = cTime.nowf()
+
+    # If between quiet hours
+    if cTime.between(currentTime, [runTime[0], tempGraceTime[0]]) or cTime.between(currentTime, [runTime[1], tempGraceTime[1]]):
+        return
+
+    else:
+        if queueNotification == "high":
+            printHigh(avgTemp)
+            queueNotification = None
+        elif queueNotification == "low":
+            printLow(avgTemp)
+            queueNotification = None
+        elif queueNotification == "return":
+            printReturn(avgTemp)
+            queueNotification = None
+
+
 def loop():
-    global lastCheckL, lastCheckM, lastState
+    global lastCheckL, lastCheckM, lastState, cycle, targetTemp, queueNotification, logFileDHT
 
     currentTime, unformattedTime = cTime.all()
     fanState = fan.state()
     servoState = servos.state()
     lightState = light.getState()
     updateState = False
-
-    targetTemp = None
-    cycle = None
 
     DHTData = DHTSensors.getData()
     minTemp, maxTemp, avgTemp = DHTSensors.getTempSummary(ignore=["light"])
@@ -142,29 +196,57 @@ def loop():
     print("Current Time: {}".format(currentTime))
     print("Tempretures are: {:.2f}°F, {:.2f}°F, Light: {:.2f}°F - Average: {:.2f}°F".format(DHTData["left"]["temp"], DHTData["right"]["temp"], DHTData["light"]["temp"], avgTemp))
     print("RH Values are: {:.2f}%, {:.2f}%, Light: {:.2f}%".format(DHTData["left"]["RH"], DHTData["right"]["RH"], DHTData["light"]["RH"]))
+    logFileDHT.write("{}, {:.2f}, {:.2f}, {:.2f}, {:.2f}, {:.2f}, {:.2f}, {:.2f}\n".format(currentTime, DHTData["left"]["temp"], DHTData["right"]["temp"], DHTData["light"]["temp"], avgTemp,
+                                                                                         DHTData["left"]["RH"], DHTData["right"]["RH"], DHTData["light"]["RH"]))
 
-
-
+    # If fan is already on, check if it was a special case
+    # If it is, default to off for now.
+    if fanState == ON:
+        if lastState == 1 or lastState == -1:
+            fanState = OFF
 
     # If daylight hours.
     if cTime.between(currentTime, runTime):
-        # If there is no temp setting
-        if tempSet[0] is None:
-            servoState = ON
-            fanState = ON
-        else:
-            targetTemp = tempSet[0]
+
+        if cycle == 1:
+            # If there is no temp setting
+            if tempSet[0] is None:
+                targetTemp = None
+                lightState = ON
+                servoState = ON
+                fanState = ON
+            else:
+                targetTemp = tempSet[0]
+                lightState = ON
+                fanState = OFF
+                servoState = OFF
+                
+            heatpad.set(OFF)
+            lastState = -1
             cycle = 0
 
     # Nighttime
     else:
-        # If there is no temp setting
-        if tempSet[1] is None:
-            servoState = OFF
-        else:
-            targetTemp = tempSet[0]
+        if cycle == 0:
+            # If there is no temp setting
+            if tempSet[1] is None:
+                targetTemp = None
+                servoState = OFF
+                fanState = OFF
+                lightState = OFF
+            else:
+                targetTemp = tempSet[1]
+                servoState = OFF
+                fanState = OFF
+                lightState = OFF
+                lastState = -1
+
+            heatpad.set(OFF)
+            lastState = -1
             cycle = 1
 
+    if lastState != -3 and light.getMaxOn() == True and lightState == ON:
+        lightState = OFF
 
     if targetTemp != None:
         # Get Current State
@@ -187,28 +269,35 @@ def loop():
         # FSM Take action based on last state
         # State 3
         if lastState == -3:
-            if newState == 1:
+            if newState == -1 and queueNotification != None:
+                queueNotification = None
+            elif newState == 1:
                 if cycle == 1:          # If nighttime, turn off lights
                     lightState = OFF
                 fanState = OFF
-                printReturn(avgTemp)
+                if queueNotification == None:
+                    queueNotification = "return"
+                else:
+                    queueNotification = None
                 updateState = True
             elif newState == 2:
                 if cycle == 1:          # If nighttime, turn off lights
                     lightState = OFF
                 servoState = ON
-                printReturn(avgTemp)
+                if queueNotification == None:
+                    queueNotification = "return"
+                else:
+                    queueNotification = None
                 updateState = True
             elif newState == 3:
                 lightState, servoState = OFF, ON
-                printHigh(avgTemp)
+                queueNotification = "high"
                 updateState = True
 
         elif lastState == -2:
             if newState == -3:
-                if cycle == 1:
-                    lightState = ON
-                printLow(avgTemp)
+                lightState = ON
+                queueNotification = "low"
                 updateState = True
             elif newState == 1:
                 fanState = OFF
@@ -218,7 +307,7 @@ def loop():
                 updateState = True
             elif newState == 3:
                 lightState, servoState = OFF, ON
-                printHigh(avgTemp)
+                queueNotification = "high"
                 updateState = True
 
         elif lastState == -1 or lastState == 1:
@@ -226,17 +315,18 @@ def loop():
                 if cycle == 1:
                     lightState = ON
                 fanState = ON
-                printLow(avgTemp)
+                queueNotification = "low"
                 updateState = True
             elif newState == -2:
-                fanState = ON
+                if not (cycle == 0 and light.getState == OFF):
+                    fanState = ON
                 updateState = True
             elif newState == 2:
                 fanState, servoState = ON, ON
                 updateState = True
             elif newState == 3:
                 lightState, fanState, servoState = OFF, ON, ON
-                printHigh(avgTemp)
+                queueNotification = "high"
                 updateState = True
 
         elif lastState == 2:
@@ -244,7 +334,7 @@ def loop():
                 if cycle == 1:
                     lightState = ON
                 servoState = OFF
-                printLow(avgTemp)
+                queueNotification = "low"
                 updateState = True
             elif newState == -2:
                 servoState = OFF
@@ -254,26 +344,39 @@ def loop():
                 updateState = True
             elif newState == 3:
                 lightState = OFF
-                printHigh(avgTemp)
+                queueNotification = "high"
                 updateState = True
 
         elif lastState == 3:
             if newState == -3:
                 lightState, servoState = ON, OFF
-                printLow(avgTemp)
+                queueNotification = "low"
                 updateState = True
             elif newState == -2:
                 if cycle == 0:
                     lightState = ON
                 servoState = OFF
-                printReturn(avgTemp)
+                if queueNotification == None:
+                    queueNotification = "return"
+                else:
+                    queueNotification = None
                 updateState = True
             elif newState == -1:
                 if cycle == 0:
                     lightState = ON
                 fanState, servoState = OFF, OFF
-                printReturn(avgTemp)
+                if queueNotification == None:
+                    queueNotification = "return"
+                else:
+                    queueNotification = None
                 updateState = True
+            elif newState == 1 and queueNotification != None:
+                queueNotification = None
+
+        if newState == -2 or newState == -3:
+            heatpad.set(ON)
+        else:
+            heatpad.set(OFF)
                                             
 
     # If fan is not already on, check if we need to mix the air
@@ -285,31 +388,40 @@ def loop():
             fanState = ON
 
         # Check light temprature
-        if DHTData["light"]["temp"] > 89:
+        if DHTData["light"]["temp"] > LIGHT_MAX_TEMP:
             fanState = ON
         
-
-    # Apply Changes
-    light.set(lightState)
-    servos.all(servoState)
-    fan.set(fanState)
-    if updateState:
-        lastState = newState
+    if queueNotification != None:
+        processesNotif(avgTemp)
 
     # Check to see if we need to update smartplug data
     if cTime.diff(lastCheckL, unformattedTime) > SPCHECK_INTERVAL:
         lastCheckL = cTime.now()
         light.updateState()
+        light.checkMaxOn()
+
+    # Apply Changes
+    light.set(lightState)
+    servos.all(servoState)
+    fan.set(fanState)
+
+    if updateState:
+        lastState = newState
 
     # Check moisture sensor
     if cTime.diff(lastCheckM, unformattedTime) > MOISTURE_SENSOR_CHK_INTERVAL:
         lastCheckM = cTime.now()
         mData = mSensor.readAll()
-        logSoilData(mData)
+        logSoilData(currentTime, mData)
         ADS1115C.checkData(mData, notify, SOIL_THRESH)
 
-    cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
+    # Do nightly reset
+    if currentTime < "00:03:00":
+        light.timeReset()
+
     print("")
+    cTime.sleep(SYSTEM_LOOP_INTERVAL - cTime.currSec())
+    
     return
 
 

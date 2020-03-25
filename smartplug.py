@@ -6,21 +6,15 @@ import cTime
 commands = {'info'     : '{"system":{"get_sysinfo":{}}}',
             'on'       : '{"system":{"set_relay_state":{"state":1}}}',
             'off'      : '{"system":{"set_relay_state":{"state":0}}}',
-            'cloudinfo': '{"cnCloud":{"get_info":{}}}',
-            'wlanscan' : '{"netif":{"get_scaninfo":{"refresh":0}}}',
-            'time'     : '{"time":{"get_time":{}}}',
-            'schedule' : '{"schedule":{"get_rules":{}}}',
-            'countdown': '{"count_down":{"get_rules":{}}}',
-            'antitheft': '{"anti_theft":{"get_rules":{}}}',
-            'reboot'   : '{"system":{"reboot":{"delay":1}}}',
-            'reset'    : '{"system":{"reset":{"delay":1}}}',
-            'energy'   : '{"emeter":{"get_realtime":{}}}'
 }
 
 class Smartplug:
     def __init__(self, ip):
         self.ip = ip
-        self.state = plugs.send(self.ip, commands["info"])["system"]["get_sysinfo"]["relay_state"]
+        plugJSON = plugs.send(self.ip, commands["info"])["system"]["get_sysinfo"]
+        self.state = plugJSON["relay_state"]
+        self.pastRuntime = int(plugJSON["on_time"])
+        self.maxOn = False
 
 
     def set(self, newState):
@@ -42,15 +36,44 @@ class Smartplug:
 
     def off(self, ip):
         if self.state == 1:
+            currRuntime = plugs.send(self.ip, commands["info"])["system"]["get_sysinfo"]["on_time"]
             if plugs.send(self.ip, commands["off"])["system"]["set_relay_state"]["err_code"] == 0:
                 print(cTime.nowf() + " - ACTION: Lights Off")
                 self.state = 0
+                self.pastRuntime += int(currRuntime)
                 return 0
             else:
                 print(cTime.nowf() + " - ALERT: Failed to turn lights off", file=sys.stderr)
 
     def getState(self):
         return self.state
+
+
+    def getRunTime(self):
+        return self.pastRuntime + int(getTimeOn)
+
+
+    def checkMaxOn(self):
+        if self.getRunTime() > 43200:
+            self.maxOn = True
+
+
+    def getMaxOn(self):
+        return self.maxOn
+
+
+    def timeReset(self):
+        plugJSON = plugs.send(self.ip, commands["info"])["system"]["get_sysinfo"]
+        currState = plugJSON["relay_state"]
+
+        if currState == 1:
+            plugs.send(self.ip, commands["off"])
+
+        self.pastRuntime = 0
+        self.maxOn = False
+
+        if currState == 1:
+            plugs.send(self.ip, commands["on"])
 
 
     def updateState(self):
